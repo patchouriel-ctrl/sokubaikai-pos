@@ -30,9 +30,13 @@ function videosOfEvent() {
 }
 
 export function showDemo(manual) {
-  list = videosOfEvent();
+  const chosen = videosOfEvent();
+  // 読めない動画（端末から中身が消えたもの）は飛ばす
+  list = chosen.filter(v => blobUrl(v.blobId));
   if (!list.length) {
-    if (manual) toast('このイベントのデモ映像が選ばれていません（イベント → 編集）');
+    if (manual) toast(chosen.length
+      ? 'デモ映像が読めなくなっています。取り込みパックを読み直すか、設定で動画を取り込み直してください'
+      : 'このイベントのデモ映像が選ばれていません（イベント → 編集）', 6000);
     else lastActive = Date.now();
     return;
   }

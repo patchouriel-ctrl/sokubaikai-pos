@@ -94,11 +94,8 @@ function tile(p, ev) {
     c,
     h('div', { class: 'tile-body' },
       h('div', { class: 'tile-title' }, p.title),
-      vs.length
-        ? [h('div', { class: 'tile-meta' }, h('span', { class: 'tile-circle' }, circleName(p.circleId))), prices(ev, p, 'price')]
-        : h('div', { class: 'tile-meta' },
-          h('span', { class: 'tile-circle' }, circleName(p.circleId)),
-          prices(ev, p, 'price')),
+      // サークル名は一覧では出さず、詳細画面で出す（情報を絞るため）
+      h('div', { class: 'tile-meta' }, prices(ev, p, 'price')),
       h('hr'),
       p.kind !== 'cd'
         ? h('div', { class: 'tile-notes' }, p.notes || '')

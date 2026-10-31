@@ -20,7 +20,16 @@ player.onTime = updateMini;
 
 if (TEST) document.documentElement.classList.add('test');
 
-await load();
+// 起動中・起動に失敗したときも真っ暗にしない
+const boot = text => app.replaceChildren(Object.assign(document.createElement('div'), { className: 'booting', textContent: text }));
+try {
+  await load((n, total) => boot(`データを新しい形に移しています…（${n} / ${total}）
+初回だけ時間がかかります`));
+} catch (e) {
+  boot(`起動できませんでした：${e?.message || e}
+アプリを閉じて開き直してください。直らないときはこの文面を伝えてください。`);
+  throw e;
+}
 navigator.storage?.persist?.().catch(() => {});
 initDemo();
 nav.render();

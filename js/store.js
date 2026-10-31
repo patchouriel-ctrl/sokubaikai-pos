@@ -5,13 +5,18 @@ import { uid } from './ui.js';
 export const state = { circles: [], products: [], events: [], sales: [], settings: {}, brokenBlobs: 0 };
 const urls = new Map();
 
-export async function load() {
+// onProgress：画像・音源を新しい形に移している間、進み具合を知らせる
+export async function load(onProgress = () => {}) {
   for (const k of ['circles', 'products', 'events', 'sales']) state[k] = await db.all(k);
   for (const s of await db.all('settings')) state.settings[s.id] = s.value;
   state.brokenBlobs = 0;
-  for (const b of await db.all('blobs')) {
+  const blobs = await db.all('blobs');
+  const old = blobs.filter(b => !b.data).length;
+  let moved = 0;
+  for (const b of blobs) {
     if (b.data) { urls.set(b.id, URL.createObjectURL(new Blob([b.data], { type: b.type }))); continue; }
     // 以前の形（Blob のまま保存）を中身のデータで保存し直す。もう読めないものは数えて知らせる。
+    onProgress(++moved, old);
     try {
       const data = await b.blob.arrayBuffer();
       await db.put('blobs', { id: b.id, name: b.name, type: b.type, data });

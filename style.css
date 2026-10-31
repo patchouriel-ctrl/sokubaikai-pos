@@ -321,3 +321,6 @@ select { padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; b
 .kp-key { font-size: 1.5em; padding: 14px 0; border-radius: 12px; background: var(--fill); color: var(--text); border: 0; }
 .kp-key.sub { color: var(--muted); font-size: 1.2em; }
 .kp-key:active { background: var(--line); }
+
+/* 起動中・起動失敗の表示 */
+.booting { height: 100%; display: flex; align-items: center; justify-content: center; text-align: center; white-space: pre-line; color: var(--muted); padding: 40px; line-height: 1.8; }

@@ -1,6 +1,6 @@
 // 設定（取り込みパック・デモ映像の取り込み・バックアップ・保存状況）
 import { h, nav, uid, toast, pickFiles, offerFile, modal, stamp, numField } from './ui.js';
-import { state, save, setting, setSetting, addBlob, removeBlob, blobOfRecord } from './store.js';
+import { state, save, setting, setSetting, addBlob, removeBlob, blobOfRecord, blobUrl } from './store.js';
 import { db, STORES } from './db.js';
 import { makeZip, readZip } from './zip.js';
 import { importPack } from './pack.js';
@@ -31,7 +31,7 @@ export function renderSettings() {
       h('button', { class: 'btn', onclick: addVideos }, '＋ 動画を取り込む（複数可）'),
       h('div', { class: 'rows' }, videos.map(v =>
         h('div', { class: 'row' },
-          h('span', { class: 'grow' }, v.name),
+          h('span', { class: 'grow' }, v.name, blobUrl(v.blobId) ? null : h('small', { class: 'warn' }, '（読めません。取り込み直してください）')),
           h('button', { class: 'btn small danger', onclick: () => deleteVideo(v) }, '削除'))))),
     h('section', { class: 'card' },
       h('h2', {}, 'バックアップ'),

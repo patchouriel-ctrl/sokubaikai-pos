@@ -40,7 +40,7 @@ export async function importPack() {
   const library = setting('videos', []);
   for (const v of pack.videos || []) {
     const dup = library.some(x => x.name === v.name);
-    entries.push({ item: v, checked: !dup, disabled: dup, label: `${dup ? '同じ名前があるので飛ばす' : '追加'}：デモ映像「${v.name}」` });
+    entries.push({ item: v, checked: true, label: `${dup ? '更新' : '追加'}：デモ映像「${v.name}」` });
   }
   const ev = currentEvent();
   const boxes = entries.map(e => h('input', { type: 'checkbox', checked: e.checked, disabled: e.disabled, onchange: x => (e.checked = x.target.checked) }));
@@ -139,7 +139,15 @@ async function applyPack(pack, files, ev, chosen) {
   }
   const library = [...setting('videos', [])];
   for (const v of pack.videos || []) {
-    if (!chosen.has(v) || library.some(x => x.name === v.name)) continue;
+    if (!chosen.has(v)) continue;
+    // 同じ名前の動画は中身を入れ替える（読めなくなった動画もこれで直る）。イベントの選択はそのまま。
+    const same = library.find(x => x.name === v.name);
+    if (same) {
+      const old = same.blobId;
+      same.blobId = await blobOf(files, v.file);
+      await removeBlob(old);
+      continue;
+    }
     const video = { id: uid(), name: v.name, blobId: await blobOf(files, v.file) };
     library.push(video);
     if (ev) ev.demoVideoIds = [...ev.demoVideoIds, video.id];
