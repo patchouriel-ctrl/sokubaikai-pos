@@ -1,6 +1,6 @@
 // 設定（取り込みパック・デモ映像の取り込み・バックアップ・保存状況）
 import { h, nav, uid, toast, pickFiles, offerFile, modal, stamp, numField } from './ui.js';
-import { state, save, setting, setSetting, addBlob, removeBlob } from './store.js';
+import { state, save, setting, setSetting, addBlob, removeBlob, blobOfRecord } from './store.js';
 import { db, STORES } from './db.js';
 import { makeZip, readZip } from './zip.js';
 import { importPack } from './pack.js';
@@ -16,6 +16,11 @@ export function renderSettings() {
       h('h2', {}, '取り込みパック'),
       h('p', { class: 'muted' }, 'PC で作った「取り込みパック」（zip）から、サークル・商品・音源・ジャケット・デモ映像をまとめて取り込みます。今のデータに足し込むので、売上は消えません。'),
       h('button', { class: 'btn primary', onclick: importPack }, '取り込みパックを読み込む（Google ドライブ対応）')),
+    h('section', { class: 'card' },
+      h('h2', {}, '会計'),
+      h('label', { class: 'check' },
+        h('input', { type: 'checkbox', checked: !!setting('useCash', false), onchange: e => setSetting('useCash', e.target.checked) }),
+        '預かり金を入れてお釣りを計算する（外すと、合計金額だけを記録します）')),
     h('section', { class: 'card' },
       h('h2', {}, '試聴画面'),
       h('div', { class: 'field' }, h('span', {}, '操作がないとデモ映像に切り替えるまでの秒数（0 で切り替えない）'),
@@ -40,6 +45,7 @@ export function renderSettings() {
         ? [h('p', {}, `使用量：${storageInfo.usage}（上限の目安：${storageInfo.quota}）`),
            h('p', {}, storageInfo.persisted ? 'データは消されにくい設定になっています。' : 'データが自動で消されないよう、iPad の空き容量に余裕を持たせてください。')]
         : h('p', { class: 'muted' }, '確認中…'),
+      state.brokenBlobs ? h('p', { class: 'warn' }, `読めなくなった画像・音源が ${state.brokenBlobs} 件あります。取り込みパックかバックアップを読み直してください（今後は起きないよう直しました）。`) : null,
       h('p', { class: 'muted' }, `商品 ${state.products.length} 点・イベント ${state.events.length} 件・会計 ${state.sales.length} 件`)));
 }
 
@@ -81,7 +87,8 @@ async function deleteVideo(v) {
 async function exportBackup() {
   toast('バックアップを作っています…', 60000);
   try {
-    const blobs = await db.all('blobs');
+    // 読めなくなったもの（以前の形のまま）は入れない
+    const blobs = (await db.all('blobs')).filter(b => b.data);
     const data = {
       format: BACKUP_FORMAT, version: 1, exportedAt: new Date().toISOString(),
       circles: state.circles, products: state.products, events: state.events, sales: state.sales, settings: state.settings,
@@ -89,7 +96,7 @@ async function exportBackup() {
     };
     const zip = await makeZip([
       { name: 'data.json', data: new TextEncoder().encode(JSON.stringify(data)) },
-      ...blobs.map(b => ({ name: `blobs/${b.id}`, data: b.blob })),
+      ...blobs.map(b => ({ name: `blobs/${b.id}`, data: blobOfRecord(b) })),
     ]);
     toast('できました', 1500);
     offerFile(zip, `試聴POSバックアップ_${stamp()}.zip`);
@@ -122,7 +129,7 @@ async function importBackup() {
       await db.putMany('settings', Object.entries(data.settings).map(([id, value]) => ({ id, value })));
       for (const b of data.blobs) {
         const part = files.get(`blobs/${b.id}`);
-        if (part) await db.put('blobs', { id: b.id, name: b.name, type: b.type, blob: new Blob([part], { type: b.type }) });
+        if (part) await db.put('blobs', { id: b.id, name: b.name, type: b.type, data: await part.arrayBuffer() });
       }
       location.reload();
     } },

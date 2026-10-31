@@ -1,6 +1,6 @@
 // 会計画面（現金のみ。お釣りを出し、売上を記録する）
 import { h, nav, yen, uid, toast, modal, keypad } from './ui.js';
-import { state, save, currentEvent, blobUrl, coverIdOf, sortedCircles, sortedProducts } from './store.js';
+import { state, save, setting, currentEvent, blobUrl, coverIdOf, sortedCircles, sortedProducts } from './store.js';
 import { isSelling, priceOf, remaining, computeCart, fullTitle } from './logic.js';
 
 // カート。editingSaleId があるときは、その会計を直している最中。
@@ -106,14 +106,15 @@ export function renderRegister() {
       }),
       calc.discounts.map(d => h('div', { class: 'cart-discount auto' }, `${d.name}（${d.circleName}）`, h('span', {}, `−${yen(d.amount)}`)))),
     h('div', { class: 'cart-total' }, h('span', {}, '合計'), h('strong', {}, yen(calc.total))),
-    h('div', { class: 'cash' },
+    // 預かり金とお釣りは設定で使うときだけ出す（既定は使わない：合計だけ記録する）
+    useCash() ? h('div', { class: 'cash' },
       h('div', { class: 'cash-row' }, '預かり',
         h('button', { class: 'received', onclick: enterReceived },
           received === null ? h('span', { class: 'ph-text' }, 'ちょうど（押すとテンキー）') : yen(received))),
       h('div', { class: 'quick' }, [1000, 2000, 5000, 10000].map(n =>
         h('button', { class: 'btn small', onclick: () => addReceived(n) }, `＋${yen(n)}`)),
-        h('button', { class: 'btn small', onclick: () => { cart.received = ''; nav.render(); } }, 'ちょうど'))),
-    h('div', { class: 'change' + (change !== null && change < 0 ? ' short' : '') }, h('span', {}, 'お釣り'), h('strong', { id: 'change' }, changeText())),
+        h('button', { class: 'btn small', onclick: () => { cart.received = ''; nav.render(); } }, 'ちょうど'))) : null,
+    useCash() ? h('div', { class: 'change' + (change !== null && change < 0 ? ' short' : '') }, h('span', {}, 'お釣り'), h('strong', { id: 'change' }, changeText())) : null,
     h('div', { class: 'cart-actions' },
       h('button', { class: 'btn', disabled: !cart.lines.length && !editing, onclick: () => { if (cart.lines.length && !confirm('カートを空にしますか？')) return; resetCart(); nav.render(); } }, editing ? 'やめる' : '空にする'),
       h('button', { class: 'btn primary big', disabled: !calc.lines.length, onclick: () => confirmSale(ev, calc, editing) }, editing ? '直した内容で確定' : '会計を確定')));
@@ -121,8 +122,10 @@ export function renderRegister() {
   return h('div', { class: 'register' }, left, right);
 }
 
+const useCash = () => !!setting('useCash', false);
+
 async function confirmSale(ev, calc, editing) {
-  const received = cart.received === '' ? calc.total : parseInt(cart.received, 10);
+  const received = !useCash() || cart.received === '' ? calc.total : parseInt(cart.received, 10);
   if (!(received >= calc.total)) { alert('預かり金が合計より少なくなっています。'); return; }
   const now = new Date().toISOString();
   const body = { lines: calc.lines, discounts: calc.discounts, subtotal: calc.subtotal, total: calc.total, received, change: received - calc.total, updatedAt: now };

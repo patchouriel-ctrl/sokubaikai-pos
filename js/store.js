@@ -2,21 +2,41 @@
 import { db } from './db.js';
 import { uid } from './ui.js';
 
-export const state = { circles: [], products: [], events: [], sales: [], settings: {} };
+export const state = { circles: [], products: [], events: [], sales: [], settings: {}, brokenBlobs: 0 };
 const urls = new Map();
 
 export async function load() {
   for (const k of ['circles', 'products', 'events', 'sales']) state[k] = await db.all(k);
   for (const s of await db.all('settings')) state.settings[s.id] = s.value;
-  for (const b of await db.all('blobs')) urls.set(b.id, URL.createObjectURL(b.blob));
+  state.brokenBlobs = 0;
+  for (const b of await db.all('blobs')) {
+    if (b.data) { urls.set(b.id, URL.createObjectURL(new Blob([b.data], { type: b.type }))); continue; }
+    // 以前の形（Blob のまま保存）を中身のデータで保存し直す。もう読めないものは数えて知らせる。
+    try {
+      const data = await b.blob.arrayBuffer();
+      await db.put('blobs', { id: b.id, name: b.name, type: b.type, data });
+      urls.set(b.id, URL.createObjectURL(new Blob([data], { type: b.type })));
+    } catch {
+      state.brokenBlobs++;
+    }
+  }
 }
+
+// iPad の Safari は、ファイル選択で選んだファイル（とその一部）を Blob のまま保存すると、
+// 元の一時ファイルが消えたとき（アプリの更新・再起動など）に読めなくなる。中身のデータを写して保存する。
+export async function putBlob(id, blob, name, type) {
+  const data = await blob.arrayBuffer();
+  await db.put('blobs', { id, name, type, data });
+  if (urls.has(id)) URL.revokeObjectURL(urls.get(id));
+  urls.set(id, URL.createObjectURL(new Blob([data], { type })));
+}
+export const blobOfRecord = b => (b.data ? new Blob([b.data], { type: b.type }) : b.blob);
 
 export const blobUrl = id => (id ? urls.get(id) || null : null);
 
 export async function addBlob(file) {
   const id = uid();
-  await db.put('blobs', { id, blob: file, name: file.name, type: file.type });
-  urls.set(id, URL.createObjectURL(file));
+  await putBlob(id, file, file.name, file.type);
   return id;
 }
 
