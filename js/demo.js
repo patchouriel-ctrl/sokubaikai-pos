@@ -9,6 +9,7 @@ const video = document.getElementById('demo-video');
 let lastActive = Date.now();
 let list = [];
 let idx = 0;
+let hiding = null; // 消えていく途中のタイマー
 
 export function initDemo() {
   video.muted = true;
@@ -45,7 +46,11 @@ export function showDemo(manual) {
   resetListen();
   nav.render();
   idx = 0;
+  clearTimeout(hiding);
+  hiding = null;
   overlay.hidden = false;
+  overlay.offsetWidth; // 一度描かせてから薄く出す
+  overlay.classList.add('show');
   playCurrent();
 }
 
@@ -55,12 +60,18 @@ function playCurrent() {
   video.play().catch(() => {});
 }
 
+// 下に試聴画面を描いてから、映像をふわっと消す（消えていく間、タイルが順に現れる）
 function hideDemo() {
-  overlay.hidden = true;
-  video.pause();
-  video.removeAttribute('src');
-  video.load();
+  if (hiding) return;
   lastActive = Date.now();
-  resetListen();
+  resetListen('enter');
   nav.render();
+  overlay.classList.remove('show');
+  hiding = setTimeout(() => {
+    hiding = null;
+    overlay.hidden = true;
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+  }, 600);
 }

@@ -9,17 +9,55 @@ import { player, fmtSec } from './player.js';
 
 let selectedId = null;
 let circleId = null; // お品書きで表示中のサークル
-export function resetListen() { selectedId = null; }
+// 画面の動き。描画は状態が変わるたびに丸ごと作り直すので、切り替えた直後の 1 回だけ動かす。
+// pending = { kind: 'open'（詳細へ）| 'close'（一覧へ）| 'circle'（サークル切り替え）| 'enter'（デモ映像から戻る）, rect: 飛ばすジャケットの元の位置, id }
+let pending = null;
+let miniShown = false; // ミニプレイヤーが前の描画で出ていたか
+let playKey = '';      // 前の描画での「再生中の曲と状態」
+const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+export function resetListen(anim) { selectedId = null; pending = anim ? { kind: anim } : null; }
 
-const select = id => { selectedId = id; nav.render(); };
+// from：押したタイル・戻る前の詳細のジャケット。ジャケットがその位置から行き先へ飛んでいくように見せる。
+function select(id, from) {
+  pending = { kind: id ? 'open' : 'close', rect: from?.getBoundingClientRect(), id: id ?? selectedId };
+  selectedId = id;
+  nav.render();
+}
 
 export function renderListen() {
   const ev = currentEvent();
   const sel = selectedId && state.products.find(p => p.id === selectedId);
-  return h('div', { class: 'listen' + (player.track ? ' with-mini' : '') },
+  const anim = pending;
+  pending = null;
+  const mini = player.track ? renderMini(!miniShown) : null;
+  miniShown = !!player.track;
+  const root = h('div', { class: 'listen' + (player.track ? ' with-mini' : '') + (anim && !reduce.matches ? ' anim-' + anim.kind : '') },
     sel ? renderDetail(sel, ev) : renderGrid(ev),
     h('button', { class: 'icon-btn float-gear', 'aria-label': '管理画面', onclick: () => { nav.view = 'staff'; nav.render(); } }, icon('gear')),
-    player.track ? renderMini() : null);
+    mini);
+  // 画面に入ってから（同じ処理の続きで、描かれる前に）ジャケットを飛ばす
+  if (anim?.rect) queueMicrotask(() => {
+    const target = anim.kind === 'open' ? root.querySelector('.detail-cover') : root.querySelector(`.tile[data-id="${anim.id}"] .tile-cover`);
+    if (target) fly(anim.rect, target);
+  });
+  return root;
+}
+
+// 行き先のジャケットの写しを画面の一番上に置き、元の位置から行き先まで動かす（本物は動き終わるまで隠す）
+function fly(from, target) {
+  const to = target.getBoundingClientRect();
+  if (reduce.matches || !to.width || !from.width || !target.isConnected) return;
+  const ghost = target.cloneNode(true);
+  ghost.classList.add('ghost');
+  Object.assign(ghost.style, { left: to.left + 'px', top: to.top + 'px', width: to.width + 'px', height: to.height + 'px' });
+  document.body.append(ghost);
+  target.style.visibility = 'hidden';
+  const done = () => { target.style.visibility = ''; ghost.remove(); };
+  setTimeout(done, 800); // 動きが止まっても（画面が裏に回ったときなど）本物を隠したままにしない
+  ghost.animate([
+    { transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width})` },
+    { transform: 'none' },
+  ], { duration: 460, easing: 'cubic-bezier(.2, .8, .2, 1)' }).finished.then(done, done);
 }
 
 // 向きや大きさが変わったら並べ方を計算し直す
@@ -66,11 +104,11 @@ function renderGrid(ev) {
   const style = `--size:${size}px; --fs:${(fit ? fit.fs : fontOf(size)).toFixed(1)}px;` + (fit ? ` --cols:${fit.cols};` : '');
   return [
     multi ? h('nav', { class: 'circle-bar' }, circles.map(c =>
-      h('button', { class: 'circle-tab' + (c.id === circleId ? ' on' : ''), onclick: () => { circleId = c.id; nav.render(); } },
+      h('button', { class: 'circle-tab' + (c.id === circleId ? ' on' : ''), onclick: () => { if (c.id !== circleId) pending = { kind: 'circle' }; circleId = c.id; nav.render(); } },
         blobUrl(c.logoBlobId) ? h('img', { src: blobUrl(c.logoBlobId), alt: '' }) : null,
         h('span', {}, c.name)))) : null,
     h('div', { class: 'grid-scroll', 'data-scroll': 'grid' },
-      h('div', { class: 'grid' + (fit ? ' fit' : '') + (fit?.wrap ? ' wrap' : ''), style }, list.map(p => tile(p, ev))))];
+      h('div', { class: 'grid' + (fit ? ' fit' : '') + (fit?.wrap ? ' wrap' : ''), style }, list.map((p, i) => tile(p, ev, i))))];
 }
 
 const sellingVariants = (ev, p) => variantsOf(state.products, p.id).filter(v => isSelling(ev, v.id));
@@ -86,11 +124,12 @@ function prices(ev, p, cls) {
       h('span', { class: 'media' }, mediaLabelOf(x)), yen(priceOf(ev, x)), soldOut(ev, x) ? h('span', { class: 'media-out' }, '完売') : null)));
 }
 
-function tile(p, ev) {
+function tile(p, ev, i) {
   const c = cover(p, 'tile-cover');
   const vs = sellingVariants(ev, p);
   if ([...(isSelling(ev, p.id) ? [p] : []), ...vs].every(x => soldOut(ev, x))) c.append(h('span', { class: 'soldout' }, '完売'));
-  return h('button', { class: 'tile', onclick: () => select(p.id) },
+  // --i：現れるときに少しずつずらす順番
+  return h('button', { class: 'tile', 'data-id': p.id, style: `--i:${i}`, onclick: () => select(p.id, c) },
     c,
     h('div', { class: 'tile-body' },
       h('div', { class: 'tile-title' }, p.title),
@@ -106,10 +145,14 @@ function tile(p, ev) {
 }
 
 function renderDetail(p, ev) {
+  // 再生する曲や再生・一時停止が変わった直後だけ、その曲の行を光らせる
+  const key = player.track ? `${player.track.id}:${player.playing}` : '';
+  const changed = key !== playKey;
+  playKey = key;
   return h('div', { class: 'detail' },
     cover(p, 'detail-cover'),
     h('div', { class: 'detail-side' },
-      h('button', { class: 'back-btn', onclick: () => select(null) }, icon('back'), '一覧に戻る'),
+      h('button', { class: 'back-btn', onclick: () => select(null, document.querySelector('.detail-cover')) }, icon('back'), '一覧に戻る'),
       h('div', { class: 'detail-info' },
         h('h2', {}, p.title),
         h('div', { class: 'detail-circle' }, circleName(p.circleId)),
@@ -117,26 +160,36 @@ function renderDetail(p, ev) {
         p.notes ? h('div', { class: 'detail-notes' }, p.notes) : null,
         p.kind === 'cd' ? h('div', { class: 'detail-count' }, `${p.tracks.length} 楽曲収録`) : null),
       p.tracks.length ? h('div', { class: 'track-list', 'data-scroll': 'tracks' },
-        p.tracks.map(t => {
+        p.tracks.map((t, i) => {
           const current = player.track?.id === t.id;
-          return h('div', { class: 'track' + (current ? ' current' : ''), onclick: () => player.toggle(t, p.tracks) },
+          return h('div', { class: 'track' + (current ? ' current' : '') + (current && changed ? ' just' : ''), style: `--i:${i}`, onclick: () => player.toggle(t, p.tracks) },
             h('div', { class: 'track-title' }, t.title),
             current && player.playing ? h('span', { class: 'eq' }, h('i'), h('i'), h('i')) : null,
             h('button', { class: 'play-btn', 'aria-label': '再生' }, icon(current && player.playing ? 'pause' : 'play')));
         })) : null));
 }
 
-function renderMini() {
+// enter：出てきたばかりなら下からせり上がる。停止は沈んでから止める。
+function renderMini(enter) {
   const t = player.track;
   const btn = (name, label, fn) => h('button', { class: 'icon-btn', 'aria-label': label, onclick: fn }, icon(name));
-  return h('div', { class: 'mini' },
+  const stop = () => {
+    const el = document.querySelector('.mini');
+    if (!el || reduce.matches) return player.stop();
+    let stopped = false;
+    const done = () => { if (!stopped) { stopped = true; player.stop(); } };
+    setTimeout(done, 400); // 動きが止まっても必ず止める
+    el.animate([{ transform: 'none', opacity: 1 }, { transform: 'translateY(40px)', opacity: 0 }], { duration: 220, easing: 'ease-in', fill: 'forwards' })
+      .finished.then(done, done);
+  };
+  return h('div', { class: 'mini' + (enter ? ' enter' : '') },
     h('div', { class: 'mini-row' },
       h('span', { class: 'note' }, '♪'),
       h('div', { class: 'mini-info' }, h('div', { class: 'mini-label' }, '再生中'), h('div', { class: 'mini-title' }, t.title)),
       btn('prev', '前の曲', () => player.prev()),
       btn(player.playing ? 'pause' : 'play', '再生・一時停止', () => player.toggle(t)),
       btn('next', '次の曲', () => player.next()),
-      btn('close', '停止', () => player.stop())),
+      btn('close', '停止', stop)),
     h('input', {
       type: 'range', id: 'mp-range', class: 'mini-range', min: 0, max: Math.max(player.duration, 1), step: 0.1, value: player.time,
       oninput: e => { player.seeking = true; document.getElementById('mp-cur').textContent = fmtSec(+e.target.value); },

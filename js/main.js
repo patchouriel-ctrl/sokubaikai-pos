@@ -20,6 +20,19 @@ player.onTime = updateMini;
 
 if (TEST) document.documentElement.classList.add('test');
 
+// ピンチやダブルタップで画面が拡大されないようにする（iPad の Safari は viewport の指定だけでは拡大を止めない）
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, e => e.preventDefault(), { passive: false });
+}
+document.addEventListener('touchmove', e => { if (e.touches.length > 1) e.preventDefault(); }, { passive: false });
+// ボタンなど押す場所以外を素早く 2 回たたいたときは、2 回目を無かったことにする（押す場所は CSS で拡大しないようにしてある）
+let lastTap = 0;
+document.addEventListener('touchend', e => {
+  const now = Date.now();
+  if (now - lastTap < 350 && !e.target.closest('button, input, select, textarea, label, a, .track, .kp')) e.preventDefault();
+  lastTap = now;
+}, { passive: false });
+
 // 起動中・起動に失敗したときも真っ暗にしない
 const boot = text => app.replaceChildren(Object.assign(document.createElement('div'), { className: 'booting', textContent: text }));
 try {

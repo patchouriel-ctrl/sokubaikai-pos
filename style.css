@@ -25,15 +25,16 @@ body {
   font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Yu Gothic UI", sans-serif;
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
   overflow: hidden;
+  overscroll-behavior: none;
 }
 #app { height: 100%; }
-button { font: inherit; color: inherit; touch-action: manipulation; }
+button { font: inherit; color: inherit; }
 input, select { font: inherit; }
 /* iPad は 16px 未満の欄を押すと画面を拡大するので、欄の文字は 16px 以上にする */
 input, select, textarea { font-size: max(16px, 1em); }
-html { touch-action: manipulation; }
+/* 画面の拡大縮小をさせない：スクロールだけ許す（ピンチとダブルタップの拡大は効かなくなる） */
+*, *::before, *::after { touch-action: pan-x pan-y; }
 small { color: var(--muted); font-size: .8em; }
 hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
 .muted { color: var(--muted); font-size: .9em; }
@@ -86,7 +87,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
 .tile {
   display: flex; flex-direction: column; justify-content: flex-start; align-items: flex-start; text-align: left; border: 0; padding: 0; cursor: pointer; font-size: inherit;
   background: var(--card); border-radius: 16px; box-shadow: 0 3px 10px rgba(0,0,0,.4); overflow: hidden;
+  transition: transform .18s ease, box-shadow .18s ease;
 }
+.tile:active { transform: scale(.96); box-shadow: 0 1px 4px rgba(0,0,0,.4); }
 .tile-cover, .detail-cover {
   position: relative; background: var(--fill); aspect-ratio: 1; display: flex; align-items: center; justify-content: center; overflow: hidden;
 }
@@ -147,6 +150,26 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
 .eq i:nth-child(2) { animation-delay: -.3s; }
 .eq i:nth-child(3) { animation-delay: -.6s; }
 @keyframes eq { 0%, 100% { height: 4px; } 50% { height: 18px; } }
+.track { transition: background-color .2s ease; }
+.track:active { background: var(--accent-soft); }
+.play-btn svg { transition: transform .15s ease; }
+.track:active .play-btn svg { transform: scale(.88); }
+.track.just { animation: track-glow .7s ease-out; }
+.track.just .play-btn svg { animation: pop .38s cubic-bezier(.3, 1.6, .5, 1); }
+@keyframes track-glow { from { background: var(--accent-soft); } }
+@keyframes pop { 0% { transform: scale(.6); } 100% { transform: scale(1); } }
+
+/* 画面の切り替えの動き（listen.js が切り替えた直後だけ anim-○○ を付ける） */
+.ghost { position: fixed; z-index: 30; margin: 0 !important; transform-origin: 0 0; pointer-events: none; box-shadow: 0 8px 28px rgba(0,0,0,.55); }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+@keyframes fade-in { from { opacity: 0; } }
+.anim-open .detail-info, .anim-open .back-btn { animation: rise .45s cubic-bezier(.2, .8, .2, 1) .12s backwards; }
+.anim-open .track-list { animation: fade-in .3s ease .18s backwards; }
+.anim-open .track { animation: rise .4s cubic-bezier(.2, .8, .2, 1) backwards; animation-delay: calc(.22s + var(--i) * 45ms); }
+.anim-close .tile, .anim-circle .tile { animation: rise .42s cubic-bezier(.2, .8, .2, 1) backwards; animation-delay: calc(var(--i) * 35ms); }
+.anim-enter .tile { animation: rise .6s cubic-bezier(.2, .8, .2, 1) backwards; animation-delay: calc(.15s + var(--i) * 60ms); }
+.mini.enter { animation: mini-up .4s cubic-bezier(.2, .8, .2, 1); }
+@keyframes mini-up { from { opacity: 0; transform: translateY(40px); } }
 
 .mini {
   position: fixed; left: 16px; right: 16px; bottom: max(16px, env(safe-area-inset-bottom));
@@ -162,7 +185,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
 .mini-times { display: flex; justify-content: space-between; font: 12px ui-monospace, Menlo, monospace; color: var(--muted); }
 
 /* デモ映像 */
-#demo { position: fixed; inset: 0; background: #000; z-index: 50; display: flex; align-items: center; justify-content: center; }
+#demo { position: fixed; inset: 0; background: #000; z-index: 50; display: flex; align-items: center; justify-content: center; opacity: 0; transition: opacity .6s ease; }
+#demo.show { opacity: 1; }
 #demo video { width: 100%; height: 100%; object-fit: contain; }
 .demo-hint {
   position: absolute; bottom: 24px; left: 50%; transform: translateX(-50%); margin: 0;
@@ -170,6 +194,11 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 6px 0; }
   animation: blink 2.4s infinite;
 }
 @keyframes blink { 50% { opacity: .4; } }
+
+/* 動きを減らす設定の端末では動かさない */
+@media (prefers-reduced-motion: reduce) {
+  .listen *, .mini, #demo { animation: none !important; transition: none !important; }
+}
 
 /* 縦向きの注意（テスト時は出さない） */
 #portrait { display: none; }

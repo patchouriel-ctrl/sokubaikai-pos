@@ -1,6 +1,6 @@
 // オフラインで動かすため、アプリのファイルを端末に保存しておく。
 // アプリを更新したら VERSION を上げる（上げないと iPad に新しい版が届かない）。
-const VERSION = 'v10';
+const VERSION = 'v11';
 const CACHE = `sokubaikai-pos-${VERSION}`;
 const FILES = [
   './', 'index.html', 'style.css', 'manifest.webmanifest', 'icons/icon-180.png', 'icons/icon-512.png',
