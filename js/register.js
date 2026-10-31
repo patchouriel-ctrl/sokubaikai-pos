@@ -92,7 +92,7 @@ export function renderRegister() {
             h('span', { class: 'amount' }, yen(l.unitPrice * l.qty))),
           l.manualDiscount ? h('div', { class: 'cart-discount' }, '値引き', h('span', {}, `−${yen(l.manualDiscount)}`)) : null);
       }),
-      calc.discounts.map(d => h('div', { class: 'cart-discount rule' }, `${d.name}（${d.circleName}）`, h('span', {}, `−${yen(d.amount)}`)))),
+      calc.discounts.map(d => h('div', { class: 'cart-discount auto' }, `${d.name}（${d.circleName}）`, h('span', {}, `−${yen(d.amount)}`)))),
     h('div', { class: 'cart-total' }, h('span', {}, '合計'), h('strong', {}, yen(calc.total))),
     h('div', { class: 'cash' },
       h('label', {}, '預かり',

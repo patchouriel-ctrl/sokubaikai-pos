@@ -3,6 +3,7 @@ import { h, nav, uid, toast, pickFiles, offerFile, modal, stamp } from './ui.js'
 import { state, save, setting, setSetting, addBlob, removeBlob, blobUrl } from './store.js';
 import { db, STORES } from './db.js';
 import { makeZip, readZip } from './zip.js';
+import { importPack } from './pack.js';
 
 const BACKUP_FORMAT = 'sokubaikai-pos-backup';
 let storageInfo = null;
@@ -12,6 +13,10 @@ export function renderSettings() {
   const logo = blobUrl(setting('logoBlobId'));
   const videos = setting('videos', []);
   return h('div', { class: 'page' },
+    h('section', { class: 'card' },
+      h('h2', {}, '取り込みパック'),
+      h('p', { class: 'muted' }, 'PC で作った「取り込みパック」（zip）から、サークル・商品・音源・ジャケット・デモ映像をまとめて取り込みます。今のデータに足し込むので、売上は消えません。'),
+      h('button', { class: 'btn primary', onclick: importPack }, '取り込みパックを読み込む（Google ドライブ対応）')),
     h('section', { class: 'card' },
       h('h2', {}, '試聴画面'),
       h('label', { class: 'field' }, h('span', {}, '上部に出す名前'),
