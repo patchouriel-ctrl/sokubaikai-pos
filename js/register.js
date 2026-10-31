@@ -1,5 +1,5 @@
 // 会計画面（現金のみ。お釣りを出し、売上を記録する）
-import { h, nav, yen, uid, toast, modal } from './ui.js';
+import { h, nav, yen, uid, toast, modal, keypad } from './ui.js';
 import { state, save, currentEvent, blobUrl, coverIdOf, sortedCircles, sortedProducts } from './store.js';
 import { isSelling, priceOf, remaining, computeCart, fullTitle } from './logic.js';
 
@@ -36,10 +36,22 @@ function changeQty(line, d) {
   nav.render();
 }
 
-function setManualDiscount(line) {
-  const v = prompt('この商品の値引き額（円）。0 で値引きなし', line.manualDiscount || '');
-  if (v === null) return;
-  line.manualDiscount = Math.max(0, parseInt(v, 10) || 0);
+async function setManualDiscount(line) {
+  const v = await keypad('この商品の値引き額（0 で値引きなし）', line.manualDiscount || null, { unit: '円' });
+  if (v === undefined) return;
+  line.manualDiscount = v;
+  nav.render();
+}
+
+// 預かり金。金額ボタンは押すたびに足していく（1,000円を 2 回で 2,000円）。空欄は「ちょうど」。
+async function enterReceived() {
+  const v = await keypad('預かり金額', cart.received === '' ? null : parseInt(cart.received, 10), { allowEmpty: true, emptyLabel: 'ちょうど', unit: '円' });
+  if (v === undefined) return;
+  cart.received = v === null ? '' : String(v);
+  nav.render();
+}
+function addReceived(n) {
+  cart.received = String((parseInt(cart.received, 10) || 0) + n);
   nav.render();
 }
 
@@ -95,11 +107,11 @@ export function renderRegister() {
       calc.discounts.map(d => h('div', { class: 'cart-discount auto' }, `${d.name}（${d.circleName}）`, h('span', {}, `−${yen(d.amount)}`)))),
     h('div', { class: 'cart-total' }, h('span', {}, '合計'), h('strong', {}, yen(calc.total))),
     h('div', { class: 'cash' },
-      h('label', {}, '預かり',
-        h('input', { type: 'number', inputmode: 'numeric', id: 'received', min: 0, value: cart.received, placeholder: '空欄ならちょうど',
-          oninput: e => { cart.received = e.target.value; refreshChange(calc.total); } })),
+      h('div', { class: 'cash-row' }, '預かり',
+        h('button', { class: 'received', onclick: enterReceived },
+          received === null ? h('span', { class: 'ph-text' }, 'ちょうど（押すとテンキー）') : yen(received))),
       h('div', { class: 'quick' }, [1000, 2000, 5000, 10000].map(n =>
-        h('button', { class: 'btn small', onclick: () => { cart.received = String(n); nav.render(); } }, yen(n))),
+        h('button', { class: 'btn small', onclick: () => addReceived(n) }, `＋${yen(n)}`)),
         h('button', { class: 'btn small', onclick: () => { cart.received = ''; nav.render(); } }, 'ちょうど'))),
     h('div', { class: 'change' + (change !== null && change < 0 ? ' short' : '') }, h('span', {}, 'お釣り'), h('strong', { id: 'change' }, changeText())),
     h('div', { class: 'cart-actions' },
@@ -107,16 +119,6 @@ export function renderRegister() {
       h('button', { class: 'btn primary big', disabled: !calc.lines.length, onclick: () => confirmSale(ev, calc, editing) }, editing ? '直した内容で確定' : '会計を確定')));
 
   return h('div', { class: 'register' }, left, right);
-}
-
-// 預かり金の入力中は、画面全体を描き直さずにお釣りだけ更新する
-function refreshChange(total) {
-  const el = document.getElementById('change');
-  const box = el.parentElement;
-  const received = cart.received === '' ? null : parseInt(cart.received, 10);
-  const change = received === null || Number.isNaN(received) ? null : received - total;
-  el.textContent = change === null ? '—' : change < 0 ? `${yen(-change)} 足りません` : yen(change);
-  box.classList.toggle('short', change !== null && change < 0);
 }
 
 async function confirmSale(ev, calc, editing) {

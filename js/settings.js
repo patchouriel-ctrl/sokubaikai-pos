@@ -1,5 +1,5 @@
 // 設定（取り込みパック・デモ映像の取り込み・バックアップ・保存状況）
-import { h, nav, uid, toast, pickFiles, offerFile, modal, stamp } from './ui.js';
+import { h, nav, uid, toast, pickFiles, offerFile, modal, stamp, numField } from './ui.js';
 import { state, save, setting, setSetting, addBlob, removeBlob } from './store.js';
 import { db, STORES } from './db.js';
 import { makeZip, readZip } from './zip.js';
@@ -18,9 +18,8 @@ export function renderSettings() {
       h('button', { class: 'btn primary', onclick: importPack }, '取り込みパックを読み込む（Google ドライブ対応）')),
     h('section', { class: 'card' },
       h('h2', {}, '試聴画面'),
-      h('label', { class: 'field' }, h('span', {}, '操作がないとデモ映像に切り替えるまでの秒数（0 で切り替えない）'),
-        h('input', { type: 'number', inputmode: 'numeric', class: 'num-input', min: 0, value: setting('idleSeconds', 60),
-          onchange: e => setSetting('idleSeconds', Math.max(0, parseInt(e.target.value, 10) || 0)) }))),
+      h('div', { class: 'field' }, h('span', {}, '操作がないとデモ映像に切り替えるまでの秒数（0 で切り替えない）'),
+        numField({ title: 'デモ映像に切り替えるまでの秒数', unit: '秒', value: setting('idleSeconds', 60), onchange: v => setSetting('idleSeconds', v) }))),
     h('section', { class: 'card' },
       h('h2', {}, 'デモ映像'),
       h('p', { class: 'muted' }, '音は出さずに流します。どの映像を流すかはイベントごとに選びます（イベント → 編集）。'),

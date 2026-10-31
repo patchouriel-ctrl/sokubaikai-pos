@@ -90,6 +90,70 @@ export function modal(title, body, buttons) {
   return close;
 }
 
+// 数字だけの入力。iPad には数字だけのキーボードがないので、画面上のテンキーで入れる。
+// 決定で数値（allowEmpty なら空欄は null）、やめたら undefined を返す。
+export function keypad(title, value, { allowEmpty = false, emptyLabel = '空欄', unit = '' } = {}) {
+  return new Promise(resolve => {
+    let text = value == null ? '' : String(value);
+    let done = false;
+    let fresh = true; // 開いて最初の数字は、前の値を置き換える
+    const show = h('div', { class: 'kp-show' });
+    const draw = () => {
+      show.replaceChildren(text === '' ? h('span', { class: 'muted' }, allowEmpty ? emptyLabel : '0') : Number(text).toLocaleString('ja-JP'), unit && text !== '' ? h('small', {}, unit) : null);
+    };
+    const press = k => {
+      if (k === '⌫') text = text.slice(0, -1);
+      else if (k === 'C') text = '';
+      else {
+        if (fresh) text = '';
+        if (text.length < 9) text = (text + k).replace(/^0+(?=\d)/, '');
+      }
+      fresh = false;
+      draw();
+    };
+    const finish = v => {
+      if (done) return;
+      done = true;
+      removeEventListener('keydown', onKey, true);
+      close();
+      resolve(v);
+    };
+    const result = () => (text === '' ? (allowEmpty ? null : 0) : parseInt(text, 10));
+    const onKey = e => {
+      if (/^\d$/.test(e.key)) press(e.key);
+      else if (e.key === 'Backspace') press('⌫');
+      else if (e.key === 'Enter') finish(result());
+      else if (e.key === 'Escape') finish(undefined);
+      else return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    addEventListener('keydown', onKey, true);
+    draw();
+    const keys = ['7', '8', '9', '4', '5', '6', '1', '2', '3', 'C', '0', '⌫'];
+    const close = modal(title, h('div', { class: 'kp' },
+      show,
+      h('div', { class: 'kp-keys' }, keys.map(k => h('button', { class: 'btn kp-key' + (k === 'C' || k === '⌫' ? ' sub' : ''), onclick: () => press(k) }, k)))), [
+      allowEmpty ? { label: `${emptyLabel}にする`, onClick: () => { finish(null); return false; } } : null,
+      { label: 'やめる', onClick: () => { finish(undefined); return false; } },
+      { label: '決定', primary: true, onClick: () => { finish(result()); return false; } },
+    ].filter(Boolean));
+  });
+}
+
+// 数字の欄。押すとテンキーが開く。onchange には数値（allowEmpty なら null も）が渡る。
+export function numField({ value, title, placeholder = '', allowEmpty = false, emptyLabel, unit, cls = 'num-input', onchange }) {
+  const label = v => (v == null || v === '' ? h('span', { class: 'ph-text' }, placeholder) : Number(v).toLocaleString('ja-JP'));
+  const btn = h('button', { type: 'button', class: 'num-field ' + cls, onclick: async () => {
+    const v = await keypad(title || placeholder || '数字を入力', value, { allowEmpty, emptyLabel: emptyLabel || placeholder || '空欄', unit });
+    if (v === undefined) return;
+    value = v;
+    btn.replaceChildren(label(v));
+    onchange(v);
+  } }, label(value));
+  return btn;
+}
+
 // ファイル選択。テスト時は window.__nextFiles に入れたファイルを返す。
 export function pickFiles(accept, multiple = false) {
   if (TEST && window.__nextFiles) {

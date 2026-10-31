@@ -1,12 +1,14 @@
 // お客さん向けの試聴画面兼お品書き（参考コードの ContentView・AlbumTileView・AlbumDetailView・MiniPlayerView にあたる）。
 // 見出しは出さず、売っている商品を画面いっぱいに並べる。音源のない商品も価格の案内として並べる。
 // 別媒体（DL 版など）はタイルを分けず、元のアルバムに価格を並べる。
+// 2 サークル以上の商品を売るときは、上にサークルのロゴと名前を並べ、押すとそのサークルのお品書きに切り替える。
 import { h, icon, yen, nav } from './ui.js';
-import { state, blobUrl, currentEvent, circleName, sortedProducts } from './store.js';
+import { state, blobUrl, currentEvent, circleName, sortedProducts, sortedCircles } from './store.js';
 import { isSelling, priceOf, remaining, variantsOf, mediaLabelOf } from './logic.js';
 import { player, fmtSec } from './player.js';
 
 let selectedId = null;
+let circleId = null; // お品書きで表示中のサークル
 export function resetListen() { selectedId = null; }
 
 const select = id => { selectedId = id; nav.render(); };
@@ -30,10 +32,10 @@ function cover(p, cls) {
 
 // 画面いっぱいに並べたときに、ジャケットが一番大きくなる列数を選ぶ。
 // 文字の大きさはジャケットの 4.5%（12〜22px）、文字の部分の高さはその 13 倍とみなす。小さくなりすぎるときは縦にスクロールさせる。
-const GAP = 16, PAD = 16, GEAR = 56, MINI = 130, MIN_SIZE = 150, TEXT_LINES = 13;
+const GAP = 16, PAD = 16, GEAR = 56, MINI = 130, BAR = 72, MIN_SIZE = 150, TEXT_LINES = 13;
 const fontOf = size => Math.min(22, Math.max(12, size * 0.045));
-function layout(n) {
-  const W = innerWidth - PAD - GEAR, H = innerHeight - PAD * 2 - (player.track ? MINI : 0);
+function layout(n, withBar) {
+  const W = innerWidth - PAD - GEAR, H = innerHeight - PAD * 2 - (player.track ? MINI : 0) - (withBar ? BAR : 0);
   let best = null;
   for (let cols = 1; cols <= n; cols++) {
     const rows = Math.ceil(n / cols);
@@ -51,15 +53,24 @@ function layout(n) {
 }
 
 function renderGrid(ev) {
-  const list = sortedProducts().filter(p => !p.variantOf && (isSelling(ev, p.id) || sellingVariants(ev, p).length));
-  if (!list.length) {
+  const all = sortedProducts().filter(p => !p.variantOf && (isSelling(ev, p.id) || sellingVariants(ev, p).length));
+  if (!all.length) {
     return h('div', { class: 'empty' }, h('div', { class: 'empty-icon' }, '▦'), '登録されているアルバムがありません。');
   }
-  const fit = layout(list.length);
+  const circles = sortedCircles().filter(c => all.some(p => p.circleId === c.id));
+  if (!circles.some(c => c.id === circleId)) circleId = circles[0]?.id ?? null;
+  const multi = circles.length > 1;
+  const list = multi ? all.filter(p => p.circleId === circleId) : all;
+  const fit = layout(list.length, multi);
   const size = fit ? fit.size : MIN_SIZE;
   const style = `--size:${size}px; --fs:${(fit ? fit.fs : fontOf(size)).toFixed(1)}px;` + (fit ? ` --cols:${fit.cols};` : '');
-  return h('div', { class: 'grid-scroll', 'data-scroll': 'grid' },
-    h('div', { class: 'grid' + (fit ? ' fit' : '') + (fit?.wrap ? ' wrap' : ''), style }, list.map(p => tile(p, ev))));
+  return [
+    multi ? h('nav', { class: 'circle-bar' }, circles.map(c =>
+      h('button', { class: 'circle-tab' + (c.id === circleId ? ' on' : ''), onclick: () => { circleId = c.id; nav.render(); } },
+        blobUrl(c.logoBlobId) ? h('img', { src: blobUrl(c.logoBlobId), alt: '' }) : null,
+        h('span', {}, c.name)))) : null,
+    h('div', { class: 'grid-scroll', 'data-scroll': 'grid' },
+      h('div', { class: 'grid' + (fit ? ' fit' : '') + (fit?.wrap ? ' wrap' : ''), style }, list.map(p => tile(p, ev))))];
 }
 
 const sellingVariants = (ev, p) => variantsOf(state.products, p.id).filter(v => isSelling(ev, v.id));

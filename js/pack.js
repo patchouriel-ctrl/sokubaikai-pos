@@ -30,6 +30,7 @@ export async function importPack() {
   const entries = [];
   (pack.circles || []).forEach(c => {
     const circle = state.circles.find(x => x.name === c.name);
+    if (c.logo) entries.push({ item: c, checked: true, label: `${circle?.logoBlobId ? '更新' : '追加'}：サークル「${c.name}」のロゴ` });
     for (const p of c.products || []) {
       const exists = circle && state.products.some(x => x.circleId === circle.id && x.title === p.title);
       const extra = [p.tracks?.length ? `${p.tracks.length} 曲` : '', ...(p.variants || []).map(v => `${v.label}あり`)].filter(Boolean).join('・');
@@ -98,11 +99,17 @@ async function blobOf(files, path) {
 async function applyPack(pack, files, ev, chosen) {
   const now = () => new Date().toISOString();
   for (const c of pack.circles || []) {
-    if (!(c.products || []).some(p => chosen.has(p))) continue;
+    if (!chosen.has(c) && !(c.products || []).some(p => chosen.has(p))) continue;
     let circle = state.circles.find(x => x.name === c.name);
     if (!circle) {
       circle = { id: uid(), name: c.name, createdAt: now() };
       await save('circles', circle);
+    }
+    if (c.logo && chosen.has(c)) {
+      const old = circle.logoBlobId;
+      circle = { ...circle, logoBlobId: await blobOf(files, c.logo) };
+      await save('circles', circle);
+      await removeBlob(old);
     }
     for (const p of c.products || []) {
       if (!chosen.has(p)) continue;

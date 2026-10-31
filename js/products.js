@@ -1,5 +1,5 @@
 // サークルと商品の登録（参考コードの AdminView・AdminAlbumDetailView にあたる）
-import { h, nav, yen, uid, toast, pickFiles } from './ui.js';
+import { h, nav, yen, uid, toast, pickFiles, numField } from './ui.js';
 import { state, save, remove, addBlob, removeBlob, blobUrl, setting, setSetting, currentEvent, sortedCircles, sortedProducts } from './store.js';
 import { variantsOf, mediaLabelOf, variantTitle } from './logic.js';
 
@@ -21,7 +21,10 @@ function renderList() {
       circles.length ? h('div', { class: 'rows' }, circles.map(c => {
         const count = state.products.filter(p => p.circleId === c.id).length;
         return h('div', { class: 'row' },
+          h('span', { class: 'thumb logo-thumb' }, blobUrl(c.logoBlobId) ? h('img', { src: blobUrl(c.logoBlobId), alt: '' }) : '—'),
           h('span', { class: 'grow' }, c.name, h('small', {}, ` 商品 ${count} 点`)),
+          h('button', { class: 'btn small', onclick: () => pickCircleLogo(c) }, c.logoBlobId ? 'ロゴを変える' : 'ロゴを設定'),
+          c.logoBlobId ? h('button', { class: 'btn small', onclick: () => setCircleLogo(c, null) }, 'ロゴを外す') : null,
           h('button', { class: 'btn small', onclick: () => renameCircle(c) }, '名前を変える'),
           h('button', { class: 'btn small danger', onclick: () => deleteCircle(c, count) }, '削除'));
       })) : h('p', { class: 'muted' }, 'まだサークルがありません。'),
@@ -53,6 +56,18 @@ async function addCircle() {
   nav.render();
 }
 
+// サークルのロゴ。2 サークル以上を売るイベントでは、試聴画面のサークル切り替えに出る。
+async function pickCircleLogo(c) {
+  const [file] = await pickFiles(IMAGE_ACCEPT);
+  if (file) await setCircleLogo(c, await addBlob(file));
+}
+async function setCircleLogo(c, blobId) {
+  const old = c.logoBlobId;
+  await save('circles', { ...c, logoBlobId: blobId });
+  await removeBlob(old);
+  nav.render();
+}
+
 async function renameCircle(c) {
   const name = prompt('新しいサークル名', c.name)?.trim();
   if (!name) return;
@@ -64,6 +79,7 @@ async function deleteCircle(c, count) {
   if (count) { alert('このサークルの商品が残っています。先に商品を削除してください。'); return; }
   if (!confirm(`サークル「${c.name}」を削除しますか？`)) return;
   await remove('circles', c.id);
+  await removeBlob(c.logoBlobId);
   for (const ev of state.events) {
     delete ev.stockCircles?.[c.id];
     ev.discountRules = (ev.discountRules || []).filter(r => r.circleId !== c.id);
@@ -103,7 +119,7 @@ function renderEditor() {
           h('button', { class: 'seg-btn' + (p.kind === k ? ' on' : ''), onclick: () => { p.kind = k; nav.render(); } }, label)))),
       field('タイトル', h('input', { type: 'text', value: p.title, list: 'title-history', placeholder: 'アルバム・商品の名前', oninput: e => (p.title = e.target.value) })),
       h('datalist', { id: 'title-history' }, history.map(t => h('option', { value: t }))),
-      field('通常価格（円）', h('input', { type: 'number', inputmode: 'numeric', min: 0, step: 1, value: p.price, oninput: e => (p.price = parseInt(e.target.value, 10) || 0) })),
+      field('通常価格（円）', numField({ title: '通常価格（円）', unit: '円', cls: '', value: p.price, onchange: v => (p.price = v) })),
       field('備考・補足', h('input', { type: 'text', value: p.notes, placeholder: '例：新刊セットあり／イベント限定', oninput: e => (p.notes = e.target.value) })),
       field('ジャケット画像', h('div', { class: 'cover-edit' },
         thumb(blobUrl(p.coverBlobId)),
@@ -139,7 +155,7 @@ function renderVariants(p) {
     h('div', { class: 'rows' }, vs.map((v, i) =>
       h('div', { class: 'row' },
         h('input', { type: 'text', class: 'grow', value: v.label, placeholder: '媒体名（例：DL版）', oninput: e => (v.label = e.target.value) }),
-        h('input', { type: 'number', inputmode: 'numeric', class: 'num-input', min: 0, step: 1, value: v.price, oninput: e => (v.price = parseInt(e.target.value, 10) || 0) }),
+        numField({ title: `${v.label || 'この媒体'}の価格（円）`, unit: '円', value: v.price, onchange: x => (v.price = x) }),
         h('span', {}, '円'),
         h('button', { class: 'btn small danger', onclick: () => { vs.splice(i, 1); nav.render(); } }, '削除')))),
     h('button', { class: 'btn', onclick: () => { vs.push({ id: null, label: vs.length ? '' : 'DL版', price: 0 }); nav.render(); } }, '＋ 媒体を追加'));

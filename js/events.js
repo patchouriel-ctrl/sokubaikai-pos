@@ -1,5 +1,5 @@
 // イベントごとの設定（売る商品・イベント価格・在庫・まとめ買い割・デモ映像）
-import { h, nav, yen, uid, today, toast } from './ui.js';
+import { h, nav, yen, uid, today, toast, numField } from './ui.js';
 import { state, save, remove, setting, setSetting, currentEvent, sortedCircles, sortedProducts } from './store.js';
 import { itemOf, soldQty, fullTitle } from './logic.js';
 
@@ -107,25 +107,34 @@ function circleSection(ev, c, commit) {
       '在庫を数える（在庫数を空欄にした商品は数えません）'),
     products.length ? h('table', { class: 'table' },
       h('thead', {}, h('tr', {},
-        h('th', {}, '売る'), h('th', {}, '商品'), h('th', {}, '通常価格'), h('th', {}, 'イベント価格'),
+        h('th', {}, allSelling(ev, products, item, commit)), h('th', {}, '商品'), h('th', {}, '通常価格'), h('th', {}, 'イベント価格'),
         counting ? [h('th', {}, '在庫'), h('th', {}, '売れた'), h('th', {}, '残り')] : null)),
       h('tbody', {}, products.map(p => {
         const it = itemOf(ev, p.id);
         const sold = soldQty(state.sales, ev.id, p.id);
         return h('tr', {},
-          h('td', {}, h('input', { type: 'checkbox', checked: !!it.selling, onchange: e => { item(p).selling = e.target.checked; commit(); } })),
+          h('td', {}, h('input', { type: 'checkbox', checked: !!it.selling, onchange: e => { item(p).selling = e.target.checked; commit(true); } })),
           h('td', {}, fullTitle(p, state.products), p.kind === 'cd' || p.variantOf ? null : h('small', {}, '（CD 以外）')),
           h('td', {}, yen(p.price)),
-          h('td', {}, h('input', { type: 'number', inputmode: 'numeric', class: 'num-input', min: 0, placeholder: '通常', value: Number.isInteger(it.price) ? it.price : '',
-            onchange: e => { const v = parseInt(e.target.value, 10); item(p).price = Number.isInteger(v) ? v : null; commit(); } })),
+          h('td', {}, numField({ title: `${fullTitle(p, state.products)} のイベント価格（円）`, placeholder: '通常', emptyLabel: '通常価格', allowEmpty: true, unit: '円', value: Number.isInteger(it.price) ? it.price : null,
+            onchange: v => { item(p).price = v; commit(); } })),
           counting ? [
-            h('td', {}, h('input', { type: 'number', inputmode: 'numeric', class: 'num-input', min: 0, placeholder: '数えない', value: Number.isInteger(it.stock) ? it.stock : '',
-              onchange: e => { const v = parseInt(e.target.value, 10); item(p).stock = Number.isInteger(v) ? v : null; commit(true); } })),
+            h('td', {}, numField({ title: `${fullTitle(p, state.products)} の在庫`, placeholder: '数えない', allowEmpty: true, value: Number.isInteger(it.stock) ? it.stock : null,
+              onchange: v => { item(p).stock = v; commit(true); } })),
             h('td', {}, sold),
             h('td', {}, Number.isInteger(it.stock) ? it.stock - sold : '—'),
           ] : null);
       }))) : h('p', { class: 'muted' }, 'このサークルの商品はまだありません。'),
     rulesSection(ev, c, products, commit));
+}
+
+// 「売る」の見出しのチェック：このサークルの商品をまとめて売る・売らないにする（一部だけなら中間の表示）
+function allSelling(ev, products, item, commit) {
+  const on = products.filter(p => itemOf(ev, p.id).selling).length;
+  const box = h('input', { type: 'checkbox', checked: on > 0 && on === products.length, 'aria-label': 'すべて売る',
+    onchange: e => { for (const p of products) item(p).selling = e.target.checked; commit(true); } });
+  box.indeterminate = on > 0 && on < products.length;
+  return h('label', { class: 'check' }, box, '売る');
 }
 
 function rulesSection(ev, c, products, commit) {
@@ -138,9 +147,9 @@ function rulesSection(ev, c, products, commit) {
         h('button', { class: 'btn small danger', onclick: () => { ev.discountRules = ev.discountRules.filter(x => x !== r); commit(true); } }, '削除')),
       h('div', { class: 'rule-line' },
         '下の対象から',
-        h('input', { type: 'number', inputmode: 'numeric', class: 'num-input', min: 1, value: r.minQty, onchange: e => { r.minQty = parseInt(e.target.value, 10) || 0; commit(); } }),
+        numField({ title: '何枚以上で割り引くか', unit: '枚', value: r.minQty, onchange: v => { r.minQty = v; commit(); } }),
         '枚以上で',
-        h('input', { type: 'number', inputmode: 'numeric', class: 'num-input', min: 0, value: r.amount, onchange: e => { r.amount = parseInt(e.target.value, 10) || 0; commit(); } }),
+        numField({ title: '割引額（円）', unit: '円', value: r.amount, onchange: v => { r.amount = v; commit(); } }),
         '円引き',
         h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: !!r.repeat, onchange: e => { r.repeat = e.target.checked; commit(); } }), '枚数の倍数ごとに繰り返す（例：4 枚なら 2 回）')),
       h('div', { class: 'rule-targets' }, products.map(p =>
