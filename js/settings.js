@@ -1,6 +1,6 @@
-// 設定（表示・ロゴ・デモ映像の取り込み・バックアップ・保存状況）
+// 設定（取り込みパック・デモ映像の取り込み・バックアップ・保存状況）
 import { h, nav, uid, toast, pickFiles, offerFile, modal, stamp } from './ui.js';
-import { state, save, setting, setSetting, addBlob, removeBlob, blobUrl } from './store.js';
+import { state, save, setting, setSetting, addBlob, removeBlob } from './store.js';
 import { db, STORES } from './db.js';
 import { makeZip, readZip } from './zip.js';
 import { importPack } from './pack.js';
@@ -10,7 +10,6 @@ let storageInfo = null;
 
 export function renderSettings() {
   if (!storageInfo) loadStorageInfo();
-  const logo = blobUrl(setting('logoBlobId'));
   const videos = setting('videos', []);
   return h('div', { class: 'page' },
     h('section', { class: 'card' },
@@ -19,13 +18,6 @@ export function renderSettings() {
       h('button', { class: 'btn primary', onclick: importPack }, '取り込みパックを読み込む（Google ドライブ対応）')),
     h('section', { class: 'card' },
       h('h2', {}, '試聴画面'),
-      h('label', { class: 'field' }, h('span', {}, '上部に出す名前'),
-        h('input', { type: 'text', value: setting('title', '試聴コーナー'), onchange: e => setSetting('title', e.target.value.trim() || '試聴コーナー') })),
-      h('div', { class: 'field' }, h('span', {}, 'トップ画面のロゴ画像'),
-        h('div', { class: 'cover-edit' },
-          h('span', { class: 'thumb' }, logo ? h('img', { src: logo, alt: '' }) : '—'),
-          h('button', { class: 'btn small', onclick: pickLogo }, '画像を選ぶ'),
-          logo ? h('button', { class: 'btn small danger', onclick: removeLogo }, 'ロゴを外す') : null)),
       h('label', { class: 'field' }, h('span', {}, '操作がないとデモ映像に切り替えるまでの秒数（0 で切り替えない）'),
         h('input', { type: 'number', inputmode: 'numeric', class: 'num-input', min: 0, value: setting('idleSeconds', 60),
           onchange: e => setSetting('idleSeconds', Math.max(0, parseInt(e.target.value, 10) || 0)) }))),
@@ -60,22 +52,6 @@ async function loadStorageInfo() {
     if (est) Object.assign(storageInfo, { usage: mb(est.usage), quota: mb(est.quota) });
     storageInfo.persisted = !!(await navigator.storage?.persisted?.());
   } catch { /* 取れない環境では不明のまま */ }
-  nav.render();
-}
-
-async function pickLogo() {
-  const [file] = await pickFiles('image/*');
-  if (!file) return;
-  const old = setting('logoBlobId');
-  await setSetting('logoBlobId', await addBlob(file));
-  await removeBlob(old);
-  nav.render();
-}
-
-async function removeLogo() {
-  const old = setting('logoBlobId');
-  await setSetting('logoBlobId', null);
-  await removeBlob(old);
   nav.render();
 }
 

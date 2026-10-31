@@ -1,6 +1,17 @@
 // 価格・在庫・値引き・集計・CSV の計算（画面に依存しない）
 import { fmtDateTime } from './ui.js';
 
+// 別媒体：内容は同じで価格だけ違う商品（例：DL 版）。商品としては別に持ち（価格・在庫・売上は別々）、
+// variantOf に元の商品の id、variantLabel に媒体名を入れる。元の商品の媒体名は mediaLabel（既定は CD）。
+export const variantsOf = (products, pid) => products.filter(p => p.variantOf === pid);
+export const mediaLabelOf = p => p.variantLabel || p.mediaLabel || (p.kind === 'cd' ? 'CD' : '');
+export const variantTitle = (title, label) => `${title}（${label}）`;
+// 会計・売上で使う名前。別媒体がある商品は媒体名を付けて区別する（別媒体自身の title には最初から付いている）。
+export function fullTitle(p, products) {
+  if (p.variantOf || !variantsOf(products, p.id).length) return p.title;
+  return variantTitle(p.title, mediaLabelOf(p));
+}
+
 export const itemOf = (ev, pid) => (ev && ev.items[pid]) || {};
 export const isSelling = (ev, pid) => (ev ? !!itemOf(ev, pid).selling : true);
 
@@ -36,7 +47,7 @@ export function computeCart(ev, cartLines, products, circles) {
     if (!p || l.qty <= 0) continue;
     const unitPrice = priceOf(ev, p);
     lines.push({
-      productId: p.id, circleId: p.circleId, circleName: cname(p.circleId), title: p.title,
+      productId: p.id, circleId: p.circleId, circleName: cname(p.circleId), title: fullTitle(p, products),
       unitPrice, qty: l.qty, manualDiscount: Math.min(l.manualDiscount || 0, unitPrice * l.qty),
     });
   }

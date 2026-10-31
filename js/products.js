@@ -1,6 +1,7 @@
 // サークルと商品の登録（参考コードの AdminView・AdminAlbumDetailView にあたる）
 import { h, nav, yen, uid, toast, pickFiles } from './ui.js';
 import { state, save, remove, addBlob, removeBlob, blobUrl, setting, setSetting, currentEvent, sortedCircles, sortedProducts } from './store.js';
+import { variantsOf, mediaLabelOf, variantTitle } from './logic.js';
 
 const AUDIO_ACCEPT = '.mp3,.wav,.m4a,audio/mpeg,audio/wav,audio/x-wav,audio/mp4,audio/x-m4a,audio/aac';
 const IMAGE_ACCEPT = 'image/*';
@@ -29,7 +30,7 @@ function renderList() {
       h('h2', {}, '商品'),
       h('button', { class: 'btn primary', onclick: () => openEditor(null) }, '＋ 商品を追加'),
       circles.map(c => {
-        const list = sortedProducts().filter(p => p.circleId === c.id);
+        const list = sortedProducts().filter(p => p.circleId === c.id && !p.variantOf);
         if (!list.length) return null;
         return h('div', { class: 'group' },
           h('h3', {}, c.name),
@@ -37,7 +38,8 @@ function renderList() {
             h('button', { class: 'row link', onclick: () => openEditor(p) },
               thumb(blobUrl(p.coverBlobId)),
               h('span', { class: 'grow' }, p.title, h('small', {}, p.kind === 'cd' ? ` CD・${p.tracks.length} 曲` : ' CD 以外')),
-              h('span', {}, yen(p.price)),
+              h('span', { class: 'prices' }, [p, ...variantsOf(state.products, p.id)].map(x =>
+                h('span', {}, variantsOf(state.products, p.id).length ? `${mediaLabelOf(x)} ` : '', yen(x.price)))),
               h('span', { class: 'chev' }, '›')))));
       })));
 }
@@ -78,6 +80,7 @@ function openEditor(p) {
       id: uid(), circleId: sortedCircles()[0].id, kind: 'cd', title: '', price: 0, notes: '',
       coverBlobId: null, tracks: [], createdAt: new Date().toISOString(),
     },
+    variants: p ? variantsOf(state.products, p.id).map(v => ({ id: v.id, label: v.variantLabel, price: v.price })) : [],
     newBlobs: new Set(),
     dropBlobs: new Set(),
   };
@@ -117,11 +120,29 @@ function renderEditor() {
           h('button', { class: 'btn small', disabled: i === 0, onclick: () => moveTrack(i, -1) }, '↑'),
           h('button', { class: 'btn small', disabled: i === p.tracks.length - 1, onclick: () => moveTrack(i, 1) }, '↓'),
           h('button', { class: 'btn small danger', onclick: () => { dropBlob(t.blobId); p.tracks.splice(i, 1); nav.render(); } }, '削除'))))) : null,
+    p.kind === 'cd' ? renderVariants(p) : null,
     h('div', { class: 'actions' },
       draft.isNew ? null : h('button', { class: 'btn danger', onclick: deleteProduct }, 'この商品を削除'),
       h('span', { class: 'grow' }),
       h('button', { class: 'btn', onclick: cancel }, 'やめる'),
       h('button', { class: 'btn primary', onclick: commit }, draft.isNew ? '登録する' : '保存する')));
+}
+
+// 内容は同じで価格だけ違う媒体（DL 版など）。試聴画面では 1 枚にまとめ、会計では別のボタンになる。
+function renderVariants(p) {
+  const vs = draft.variants;
+  return h('section', { class: 'card' },
+    h('h2', {}, 'ほかの媒体（内容は同じで価格が違うもの）'),
+    h('p', { class: 'muted' }, '例：DL 版。試聴画面ではこのアルバムにまとめて価格を並べ、会計では別のボタンになります。在庫・イベント価格・売上は媒体ごとです。'),
+    vs.length ? h('label', { class: 'field' }, h('span', {}, 'この商品自体の媒体名'),
+      h('input', { type: 'text', value: p.mediaLabel || 'CD', oninput: e => (p.mediaLabel = e.target.value.trim()) })) : null,
+    h('div', { class: 'rows' }, vs.map((v, i) =>
+      h('div', { class: 'row' },
+        h('input', { type: 'text', class: 'grow', value: v.label, placeholder: '媒体名（例：DL版）', oninput: e => (v.label = e.target.value) }),
+        h('input', { type: 'number', inputmode: 'numeric', class: 'num-input', min: 0, step: 1, value: v.price, oninput: e => (v.price = parseInt(e.target.value, 10) || 0) }),
+        h('span', {}, '円'),
+        h('button', { class: 'btn small danger', onclick: () => { vs.splice(i, 1); nav.render(); } }, '削除')))),
+    h('button', { class: 'btn', onclick: () => { vs.push({ id: null, label: vs.length ? '' : 'DL版', price: 0 }); nav.render(); } }, '＋ 媒体を追加'));
 }
 
 // 保存前に取り込んだものはすぐ消し、保存済みのものは「保存する」まで残す
@@ -171,17 +192,28 @@ async function commit() {
   const p = draft.product;
   p.title = p.title.trim();
   if (!p.title) { alert('タイトルを入れてください。'); return; }
+  const vs = p.kind === 'cd' ? draft.variants.map(v => ({ ...v, label: v.label.trim() })) : [];
+  if (vs.some(v => !v.label)) { alert('ほかの媒体の媒体名を入れてください。'); return; }
   if (p.kind !== 'cd') {
     for (const t of p.tracks) dropBlob(t.blobId);
     p.tracks = [];
   }
   for (const id of draft.dropBlobs) await removeBlob(id);
   await save('products', p);
-  if (draft.isNew) {
-    // 新しい商品は、今のイベントで「売る」にしておく
-    const ev = currentEvent();
-    if (ev) { ev.items[p.id] = { selling: true }; await save('events', ev); }
+  const ev = currentEvent();
+  // 新しい商品は、今のイベントで「売る」にしておく
+  if (draft.isNew && ev) ev.items[p.id] = { selling: true };
+  const keep = new Set();
+  for (const v of vs) {
+    const old = v.id && state.products.find(x => x.id === v.id);
+    const product = old ? { ...old } : { id: uid(), kind: 'goods', notes: '', coverBlobId: null, tracks: [], createdAt: new Date().toISOString(), variantOf: p.id };
+    Object.assign(product, { circleId: p.circleId, title: variantTitle(p.title, v.label), variantLabel: v.label, price: v.price });
+    await save('products', product);
+    keep.add(product.id);
+    if (!old && ev) ev.items[product.id] = { selling: !!ev.items[p.id]?.selling };
   }
+  for (const v of variantsOf(state.products, p.id)) if (!keep.has(v.id)) await removeProductData(v);
+  if (ev) await save('events', ev);
   const history = [p.title, ...setting('titleHistory', []).filter(t => t !== p.title)].slice(0, 10);
   await setSetting('titleHistory', history);
   toast(draft.isNew ? '登録しました' : '保存しました');
@@ -191,17 +223,22 @@ async function commit() {
 
 async function deleteProduct() {
   const p = draft.product;
-  if (!confirm(`「${p.title || '無題'}」を削除しますか？ ジャケットと音源のファイルも消えます。（売上の記録は残ります）`)) return;
-  const saved = state.products.find(x => x.id === p.id);
-  const ids = new Set([...draft.newBlobs, saved?.coverBlobId, ...(saved?.tracks || []).map(t => t.blobId)]);
-  for (const id of ids) await removeBlob(id);
+  if (!confirm(`「${p.title || '無題'}」を削除しますか？ ジャケットと音源のファイル、ほかの媒体（DL 版など）も消えます。（売上の記録は残ります）`)) return;
+  for (const id of draft.newBlobs) await removeBlob(id);
+  for (const v of variantsOf(state.products, p.id)) await removeProductData(v);
+  await removeProductData(state.products.find(x => x.id === p.id) || p);
+  toast(`「${p.title}」を削除しました`);
+  draft = null;
+  nav.render();
+}
+
+// 商品とそのファイルを消し、イベントの設定からも外す（売上の記録は残す）
+async function removeProductData(p) {
+  for (const id of [p.coverBlobId, ...(p.tracks || []).map(t => t.blobId)]) await removeBlob(id);
   await remove('products', p.id);
   for (const ev of state.events) {
     delete ev.items[p.id];
     for (const r of ev.discountRules || []) r.productIds = r.productIds.filter(id => id !== p.id);
     await save('events', ev);
   }
-  toast(`「${p.title}」を削除しました`);
-  draft = null;
-  nav.render();
 }

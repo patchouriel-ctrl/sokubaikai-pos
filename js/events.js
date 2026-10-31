@@ -1,7 +1,7 @@
 // イベントごとの設定（売る商品・イベント価格・在庫・まとめ買い割・デモ映像）
 import { h, nav, yen, uid, today, toast } from './ui.js';
 import { state, save, remove, setting, setSetting, currentEvent, sortedCircles, sortedProducts } from './store.js';
-import { itemOf, soldQty } from './logic.js';
+import { itemOf, soldQty, fullTitle } from './logic.js';
 
 let editingId = null;
 
@@ -114,7 +114,7 @@ function circleSection(ev, c, commit) {
         const sold = soldQty(state.sales, ev.id, p.id);
         return h('tr', {},
           h('td', {}, h('input', { type: 'checkbox', checked: !!it.selling, onchange: e => { item(p).selling = e.target.checked; commit(); } })),
-          h('td', {}, p.title, p.kind === 'cd' ? null : h('small', {}, '（CD 以外）')),
+          h('td', {}, fullTitle(p, state.products), p.kind === 'cd' || p.variantOf ? null : h('small', {}, '（CD 以外）')),
           h('td', {}, yen(p.price)),
           h('td', {}, h('input', { type: 'number', inputmode: 'numeric', class: 'num-input', min: 0, placeholder: '通常', value: Number.isInteger(it.price) ? it.price : '',
             onchange: e => { const v = parseInt(e.target.value, 10); item(p).price = Number.isInteger(v) ? v : null; commit(); } })),
@@ -149,7 +149,7 @@ function rulesSection(ev, c, products, commit) {
             r.productIds = e.target.checked ? [...r.productIds, p.id] : r.productIds.filter(id => id !== p.id);
             commit(true);
           } }),
-          p.title))))),
+          fullTitle(p, state.products)))))),
     h('button', { class: 'btn small', onclick: () => {
       ev.discountRules.push({ id: uid(), circleId: c.id, name: '', productIds: [], minQty: 2, amount: 0, repeat: false });
       commit(true);

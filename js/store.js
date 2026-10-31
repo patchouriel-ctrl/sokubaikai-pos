@@ -51,7 +51,20 @@ export const circleName = id => state.circles.find(c => c.id === id)?.name || '�
 
 const byCreated = (a, b) => (a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : 0);
 export const sortedCircles = () => [...state.circles].sort(byCreated);
+// 別媒体（DL 版など）は元の商品のすぐ後ろに並べる
 export function sortedProducts() {
   const order = new Map(sortedCircles().map((c, i) => [c.id, i]));
-  return [...state.products].sort((a, b) => (order.get(a.circleId) ?? 999) - (order.get(b.circleId) ?? 999) || byCreated(a, b));
+  const sorted = [...state.products].sort((a, b) => (order.get(a.circleId) ?? 999) - (order.get(b.circleId) ?? 999) || byCreated(a, b));
+  const ids = new Set(sorted.map(p => p.id));
+  const out = [];
+  for (const p of sorted) {
+    if (p.variantOf && ids.has(p.variantOf)) continue;
+    out.push(p, ...sorted.filter(v => v.variantOf === p.id));
+  }
+  return out;
+}
+
+// 別媒体はジャケットを持たず、元の商品のものを使う
+export function coverIdOf(p) {
+  return p.coverBlobId || (p.variantOf && state.products.find(x => x.id === p.variantOf)?.coverBlobId) || null;
 }

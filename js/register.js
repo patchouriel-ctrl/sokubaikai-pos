@@ -1,7 +1,7 @@
 // 会計画面（現金のみ。お釣りを出し、売上を記録する）
 import { h, nav, yen, uid, toast, modal } from './ui.js';
-import { state, save, currentEvent, blobUrl, sortedCircles, sortedProducts } from './store.js';
-import { isSelling, priceOf, remaining, computeCart } from './logic.js';
+import { state, save, currentEvent, blobUrl, coverIdOf, sortedCircles, sortedProducts } from './store.js';
+import { isSelling, priceOf, remaining, computeCart, fullTitle } from './logic.js';
 
 // カート。editingSaleId があるときは、その会計を直している最中。
 const cart = { lines: [], received: '', editingSaleId: null };
@@ -60,11 +60,11 @@ export function renderRegister() {
         h('div', { class: 'reg-buttons' }, list.map(p => {
           const rem = remaining(ev, p, state.sales, cart.editingSaleId);
           const left = rem === null ? null : rem - qtyInCart(p.id);
-          const url = blobUrl(p.coverBlobId);
+          const url = blobUrl(coverIdOf(p));
           return h('button', { class: 'reg-item', disabled: left !== null && left <= 0, onclick: () => add(p.id) },
             h('span', { class: 'thumb' }, url ? h('img', { src: url, alt: '' }) : '♪'),
             h('span', { class: 'reg-item-text' },
-              h('span', { class: 'reg-item-title' }, p.title),
+              h('span', { class: 'reg-item-title' }, fullTitle(p, state.products)),
               h('span', { class: 'reg-item-sub' }, yen(priceOf(ev, p)),
                 left === null ? null : h('span', { class: left <= 0 ? 'stock out' : left <= 3 ? 'stock low' : 'stock' }, left <= 0 ? '完売' : `残り ${left}`))),
             qtyInCart(p.id) ? h('span', { class: 'in-cart' }, qtyInCart(p.id)) : null);
